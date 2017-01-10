@@ -1,0 +1,32 @@
+Name:                compile-db-spec
+Version:             0.1
+Synopsis:            Compiler for lib/db specification files
+License:             AllRightsReserved
+License-file:        LICENSE
+Author:              Eric Mertens
+Maintainer:          emertens@galois.com
+Category:            System
+Build-type:          Simple
+Cabal-version:       >=1.2
+
+
+Executable compile-db-spec
+  Main-is:             CompileConfiguration.hs
+  Other-modules:       Spec, BinDbSpec, DeviceModelSettings,
+                       ShellDmRender, SimpleKeyValue, StaticCheckMonad,
+                       ExceptionsT
+  include-dirs:        ../../lib/db-spec/includes
+  extra-lib-dirs:      ../../lib/db-spec
+  extra-libraries:     db-spec
+
+  Build-depends:       base == 4.*, pretty-show, parsec == 3.*,
+                       cereal, bytestring, containers, monadLib
+
+
+Executable compile-control-schema
+  Main-is:             CompileSchema.hs
+  Other-modules:       BinCdSchema, SimpleKeyValue
+  Build-depends:       base == 4.*, parsec == 3.*
+  cc-options:          -std=gnu99
+  c-sources:           protocols/control-domain-schema_encode.c
+  include-dirs:        include

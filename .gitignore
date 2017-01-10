@@ -1,0 +1,11 @@
+/build
+/bin
+/mk/config
+lib*.a
+*.o
+tags
+*.jessie
+*.cfg.db
+*.cfg.dm
+.*.swp
+/docs/build

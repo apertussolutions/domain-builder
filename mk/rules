@@ -1,0 +1,4 @@
+# All rules for building a small-OS kernel.
+include $(TOP)/mk/compile
+include $(TOP)/mk/link
+

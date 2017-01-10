@@ -1,0 +1,18 @@
+This library contains code for working with elf-files.
+It was copied from the Xen source tree.
+
+  headers:        xen/includes/xen
+  implementation: xen/common/libelf
+
+The source should be basically like the __XEN__ form of the path
+(i.e., no log file, as we don't have files in the basic environment).
+Other changes include:
+  * Removing unused code,
+  * Additional validation to support potentially malformed ELF files.
+
+This library is distributed under GPL becuase initially it was copied
+from Xen, and as far as we understand this code is distributed under
+the license described in the LICENSE file.
+
+
+

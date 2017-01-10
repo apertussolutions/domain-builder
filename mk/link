@@ -1,0 +1,28 @@
+# This file contains Makefile rules for linking smallOS-based VMs.
+
+ifeq ($(origin LIB_DIRS), undefined)
+$(error Variable LIB_DIRS is undefined.                 \
+        This variable defines the list of directories   \
+        containing libraries.)
+endif
+
+
+ifeq ($(origin LIBSMALLOS), undefined)
+$(error Variable LIBSMALLOS is undefined.                 \
+        This variable defines the directory containing    \
+        the linker script and start.o.)
+endif
+
+
+
+# ------------------------------------------------------------------------------
+
+LDFLAGS     +=-nostdlib \
+            -T $(LIBSMALLOS)/link.lds \
+            $(addprefix -L,$(LIB_DIRS)) \
+            $(LIBSMALLOS)/start.o
+
+
+.PHONY: basic_clean
+basic_clean:
+	-$(RM) -rf *.o $(TGT) tags stack.s

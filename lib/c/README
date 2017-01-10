@@ -1,0 +1,6 @@
+Partial implementation of libc.
+
+Restrictions to the functions in the library:
+  * No underlying OS dependencies.
+  * No global state (i.e., "resettable", "reentrant", etc.)
+

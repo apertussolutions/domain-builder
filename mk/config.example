@@ -1,0 +1,47 @@
+# This file contains options which are custom to to the build.
+
+# -- Configure Xen -------------------------------------------------------------
+
+# These are not used by the rest of the build system, just the few lines bellow.
+XEN_TREE=/home/daniel/src/xen
+XEN_INSTALL=$(XEN_TREE)/dist/install
+
+# Location of the public Xen interface.
+XEN_HEADERS?=$(XEN_INSTALL)/usr/include
+
+# Location of the hypervisor, used for testing.
+XEN_BIN?=$(XEN_INSTALL)/boot/xen.gz
+
+# Location of the hypervisor's XSM policy, used for testing.
+XEN_POLICY?=$(XEN_TREE)/tools/flask/policy/xenpolicy.24
+
+# Library for interfacing with Xen (e.g., mapping pages).
+XEN_LIBS_INCLUDE?= $(XEN_INSTALL)/usr/include
+XEN_LIBS        ?= $(XEN_INSTALL)/usr/lib64
+
+
+
+
+# -- Build options -------------------------------------------------------------
+CFLAGS    +=-Wall -Werror
+
+# -- Configure tools -----------------------------------------------------------
+CC=gcc
+MAKE=make
+AR=ar
+MKDIR=mkdir
+CP=cp
+RM=rm
+LD=ld
+CTAGS=ctags
+CAT=cat
+FIND=find
+OPENSSL=openssl
+INSTALL=install
+PANDOC=pandoc
+
+# This is for generating guest arch. specific headers.
+# See lib/db/build-tool
+PYTHON=python
+
+

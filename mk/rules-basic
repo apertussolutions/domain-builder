@@ -1,0 +1,22 @@
+# These functions are useful for contorlling the amount of output
+
+ifneq ($(V),1)
+cmd=@echo "  $1 $@"; $($1)
+Q=@
+else
+cmd=$($1)
+Q=
+endif
+
+CFLAGS+=-Wall -std=gnu99
+
+%.o: %.c
+	$(call cmd,CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+%.o: %.S
+	$(call cmd,CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+%: %.c
+	$(call cmd,CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) $< -o $@ $(LDLIBS)
+
+

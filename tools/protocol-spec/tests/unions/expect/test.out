@@ -1,0 +1,32 @@
+-- test1.out -----------------
+var1:  first field
+var2:
+  case branch1:
+    x:  1234567890
+    y:  2068013579
+var3:  last field
+encoding: Ok (59 bytes)
+saving: Ok
+decoding: Ok
+var1:  first field
+var2:
+  case branch1:
+    x:  1234567890
+    y:  2068013579
+var3:  last field
+------------------------------------
+
+-- test2.out -----------------
+var1:  first field
+var2:
+  case branch2:  1122334455
+var3:  last field
+encoding: Ok (59 bytes)
+saving: Ok
+decoding: Ok
+var1:  first field
+var2:
+  case branch2:  1122334455
+var3:  last field
+------------------------------------
+

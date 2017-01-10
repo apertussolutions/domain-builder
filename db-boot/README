@@ -1,0 +1,11 @@
+Copyright Galois, Inc. 2009
+Xen Domain Builder Application README
+
+BUILD INSTRUCTIONS:
+
+Just use "make", for the moment.
+Assumes that the libraries that it requires are already built.
+
+TO CLEAN:
+
+> make clean

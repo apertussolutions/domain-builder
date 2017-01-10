@@ -1,0 +1,34 @@
+Name:           BaseHashDSL
+Version:        0.1
+Author:         Galois Inc.
+Maintainer:     diatchki@galois.com
+Category:       DSL
+Synopsis:       An EDSL for Computing Expected Measurement Hashes
+Description:
+  BaseHsahDSL defines a declarative language for specifying hash-based
+  monitoring policies of Xen virtual machines.  The language provides
+  mechanisms to specify the expected data in various parts of the
+  a virtual machine's address space.  There is built-in support for
+  working with ELF files, as well as DWARF debugging data, which makes
+  it possible to write specifications in terms of sections and symbols
+  present in the source code of the monitored program, rather then raw
+  machine addresses.  The language is embedded in Haskell, which means
+  that the specifications have the form of Haskell programs, which
+  analyze a given input ELF binary to produce an expected hash,
+  as well as a binary file with instruction for how to reconstruct
+  the hash at runtime.
+
+Build-type:     Simple
+Cabal-version: >= 1.2
+License: BSD3
+
+Library
+  Exposed-modules: BaseHashDSL
+  Other-modules:   VM, DbSpec
+  Build-depends:
+    base < 5, mmap, monadLib, SHA, elf >= 0.23, cereal, bytestring,
+    containers, dwarfC
+  include-dirs:    ../db-spec/includes
+  GHC-options:     -O2 -Wall
+
+

@@ -1,0 +1,445 @@
+// BANNERSTART
+// Copyright: Xen developers?
+// Copyright: 2011 Galois Inc.
+// License-file: LICENSE
+// BANNEREND
+
+/***
+ * Returns section header with given name or NULL if no section with that name
+ * exists.
+ */
+static
+const ElfShdr(WX)* elf_shdr_by_name(WX)(const struct elf_binary *elf,
+                                        const char* name) {
+  const char* str_table = elf->strtab_start;
+  if (str_table == NULL) return NULL;
+  uint64_t shdr_size = elf->shdr_size;
+  uint16_t shdr_count = elf->shdr_count;
+
+  const char* raw_shdr = elf->shdr_start;
+  uint16_t i;
+  for (i = 0; i < shdr_count; i++) {
+    const ElfShdr(WX)* shdr = (const ElfShdr(WX)*) raw_shdr;
+
+    // N.B. Section string name has been checked to be null terminated in elf_init.
+    const char* sname = str_table + shdr->sh_name;
+    if (!strcmp(sname, name))
+      return shdr;
+
+    raw_shdr += shdr_size;
+  }
+  return NULL;
+}
+
+/*** Returns note name. */
+static
+const char* elf_note_name(WX)(const ElfNote(WX)* note) {
+  return (const char*) (note + 1);
+}
+
+/*** Returns note description. */
+static
+const void* elf_note_desc(WX)(const ElfNote(WX)* note) {
+  // Round name size to nearest 3 bytes.
+  // TODO: See if the 3 should be a 7 on 64bit machines.
+  int namesz = (note->namesz + 3) & ~3;
+  const char* raw_note = elf_note_name(WX)(note);
+  return (const void*) (raw_note + namesz);
+}
+
+/*** Returns numeric value of note description. */
+static
+uint64_t elf_note_numeric(WX)(const ElfNote(WX)* note) {
+  const void *desc = elf_note_desc(WX)(note);
+  int descsz = note->descsz;
+
+  //NOTE: We assume that note is least-significant byte first.
+  switch (descsz) {
+    case 1: return *((const uint8_t*) desc);
+    case 2: return *((const uint16_t*) desc);
+    case 4: return *((const uint32_t*) desc);
+    case 8: return *((const uint64_t*) desc);
+    default: return 0;
+  }
+}
+
+/*** Returns pointer to note after this one. */
+static
+const ElfNote(WX)* elf_note_next(WX)(const ElfNote(WX)* note) {
+  // Round name size and description to nearest 3 bytes.
+  // TODO: See if the 3 should be a 7 on 64bit machines.
+  int namesz = (note->namesz + 3) & ~3;
+  int descsz = (note->descsz + 3) & ~3;
+  const char* raw_note = elf_note_name(WX)(note);
+  return (const ElfNote(WX)*) (raw_note + namesz + descsz);
+}
+
+#define elf_check_note_null_terminated(elf, name, str, len) \
+  { const char* str = elf_note_desc(WX)(note); \
+    if (str[note->descsz - 1] != 0) { \
+     elf_err(elf, "%s: %s value is not null-terminated", __FUNCTION__, name); \
+     return -1; \
+    } }
+
+#define elf_assign_note_str(elf, name, dest, note) \
+  { const char* str = elf_note_desc(WX)(note); \
+    elf_check_note_null_terminated(elf, name, str, note->descsz); \
+    if (note->descsz > sizeof(dest)) { \
+      elf_err(elf, "%s: %s value is too large", __FUNCTION__, name); \
+      return -1; \
+    } \
+    elf_msg(elf, "%s: %s = \"%s\"\n", __FUNCTION__, str, name); \
+    safe_strcpy(dest, str); }
+
+/*** Attempts to parse Xen elf note returning 0 if successful. */
+static
+int elf_xen_parse_note(WX)(const struct elf_binary* elf,
+                           struct elf_dom_parms *parms,
+                           const ElfNote(WX)* note) {
+    int type = note->type;
+
+    switch (type) {
+    case XEN_ELFNOTE_LOADER:
+      elf_assign_note_str(elf, "LOADER", parms->loader, note);
+      break;
+    case XEN_ELFNOTE_GUEST_OS:
+      elf_assign_note_str(elf, "GUEST_OS", parms->guest_os, note);
+      break;
+    case XEN_ELFNOTE_GUEST_VERSION:
+      elf_assign_note_str(elf, "GUEST_VERSION", parms->guest_ver, note);
+      break;
+    case XEN_ELFNOTE_XEN_VERSION:
+      elf_assign_note_str(elf, "XEN_VERSION", parms->xen_ver, note);
+      break;
+    case XEN_ELFNOTE_PAE_MODE:
+      {
+        const char* str = elf_note_desc(WX)(note);
+        elf_check_note_null_terminated(elf, "PAE_MODE", str, note->descsz);
+        if ( !strcmp(str, "yes") ) {
+          parms->pae = 2 /* extended_cr3 */;
+        } else if ( strstr(str, "bimodal") ) {
+          parms->pae = 3 /* bimodal */;
+        } else {
+          //TODO: Log parse failure.
+        }
+      }
+      break;
+    case XEN_ELFNOTE_BSD_SYMTAB:
+      {
+        const char* str = elf_note_desc(WX)(note);
+        elf_check_note_null_terminated(elf, "PAE_MODE", str, note->descsz);
+        if (!strcmp(str, "yes")) {
+          elf_err(elf, "%s: ERROR: Including BSD symbol table is not a supported feature.\n",
+                  __FUNCTION__);
+          return -1;
+        } else {
+          elf_msg(elf, "%s: ERROR: Could not parse bsd symbol table value %s.\n",
+                  __FUNCTION__, str);
+        }
+      }
+      break;
+    case XEN_ELFNOTE_VIRT_BASE:
+      parms->virt_base = elf_note_numeric(WX)(note);
+      elf_msg(elf, "%s: VIRT_BASE = 0x%" PRIx64 "\n", __FUNCTION__,
+              parms->virt_base);
+      break;
+    case XEN_ELFNOTE_ENTRY:
+      parms->virt_entry = elf_note_numeric(WX)(note);
+      elf_msg(elf, "%s: ENTRY = 0x%" PRIx64 "\n", __FUNCTION__, parms->virt_entry);
+      break;
+    case XEN_ELFNOTE_INIT_P2M:
+      parms->p2m_base = elf_note_numeric(WX)(note);
+      elf_msg(elf, "%s: INIT_P2M = 0x%" PRIx64 "\n", __FUNCTION__,
+              parms->p2m_base);
+      break;
+    case XEN_ELFNOTE_PADDR_OFFSET:
+      parms->elf_paddr_offset = elf_note_numeric(WX)(note);
+      elf_msg(elf, "%s: PADDR_OFFSET = 0x%" PRIx64 "\n", __FUNCTION__,
+              parms->elf_paddr_offset);
+      break;
+    case XEN_ELFNOTE_HYPERCALL_PAGE:
+      parms->virt_hypercall = elf_note_numeric(WX)(note);
+      elf_msg(elf, "%s: HYPERCALL_PAGE = 0x%" PRIx64 "\n", __FUNCTION__,
+              parms->virt_hypercall);
+      break;
+    case XEN_ELFNOTE_HV_START_LOW:
+      parms->virt_hv_start_low = elf_note_numeric(WX)(note);
+      elf_msg(elf, "%s: HV_START_LOW = 0x%" PRIx64 "\n", __FUNCTION__,
+              parms->virt_hv_start_low);
+      break;
+    case XEN_ELFNOTE_FEATURES:
+      {
+        const char* str = elf_note_desc(WX)(note);
+        elf_check_note_null_terminated(elf, "PAE_MODE", str, note->descsz);
+        if ( elf_xen_parse_features(str, parms->f_supported, parms->f_required) )
+            return -1;
+      }
+      break;
+    default:
+      elf_msg(elf, "%s: unknown xen elf note (0x%x)\n",
+              __FUNCTION__, type);
+      return 0;
+    }
+    return 0;
+}
+
+/*** Parse xen notes in a section. */
+static 
+int elf_xen_parse_notes(WX)(const struct elf_binary *elf,
+                            const void* start,
+                            const void* end, 
+                            struct elf_dom_parms *parms) {
+  int xen_elfnotes = 0;
+
+  const void* raw_note = start;
+  while (raw_note < end) {
+    const ElfNote(WX)* note = raw_note;
+
+    // Update raw note to point to next note.
+    raw_note = elf_note_next(WX)(note);
+    if (raw_note > end) {
+      elf_err(elf, "%s: ERROR: Elf note runs past end of buffer",
+              __FUNCTION__);
+      return -1;
+    }
+
+    if (raw_note <= (void*)note) {
+      elf_err(elf, "%s: ERROR: Elf note runs before current note",
+              __FUNCTION__);
+      return -1;
+    }
+
+    // Skip is name is not Xen.
+    if (strcmp(elf_note_name(WX)(note), "Xen") )
+      continue;
+   
+    if (elf_xen_parse_note(WX)(elf, parms, note))
+     return -1;
+    xen_elfnotes++;
+  }
+
+  if (xen_elfnotes > 0) parms->status = XEN_PARMS_ELF_NOTES;
+
+  return xen_elfnotes;
+}
+
+/***
+ * Calculates addresses of unset parameters and checks validity of set parameters.
+ */
+static
+int elf_xen_addr_calc(WX)(const struct elf_binary* elf,
+                                struct elf_dom_parms* parms) {
+  if ( (parms->elf_paddr_offset != UNSET_ADDR) &&
+       (parms->virt_base == UNSET_ADDR) ) {
+      elf_err(elf, "%s: ERROR: ELF_PADDR_OFFSET set, VIRT_BASE unset\n",
+              __FUNCTION__);
+      return -1;
+  }
+
+  /* Initial guess for virt_base is 0 if it is not explicitly defined. */
+  if ( parms->virt_base == UNSET_ADDR) {
+      parms->virt_base = 0;
+      elf_msg(elf, "%s: VIRT_BASE unset, using 0x%" PRIx64 "\n",
+              __FUNCTION__, parms->virt_base);
+  }
+
+  /*
+   * If we are using the legacy __xen_guest section then elf_pa_off
+   * defaults to v_start in order to maintain compatibility with
+   * older hypervisors which set padd in the ELF header to
+   * virt_base.
+   *
+   * If we are using the modern ELF notes interface then the default
+   * is 0.
+   */
+  if (parms->elf_paddr_offset == UNSET_ADDR) {
+    if (parms->status == XEN_PARMS_ELF_NOTES)
+      parms->elf_paddr_offset = 0;
+    else
+      parms->elf_paddr_offset = parms->virt_base;
+    elf_msg(elf, "%s: ELF_PADDR_OFFSET unset, using 0x%" PRIx64 "\n",
+            __FUNCTION__, parms->elf_paddr_offset);
+  }
+
+  if (parms->virt_base < parms->elf_paddr_offset) {
+    elf_err(elf, "%S: ELF virtual base is less than base", __FUNCTION__);
+    return -1;
+  }
+
+  uint64_t virt_offset = parms->virt_base - parms->elf_paddr_offset;
+
+  ElfAddr(WX) min;
+  ElfAddr(WX) max;
+  elf_paddr_bounds(WX)(elf, &min, &max);
+
+  if (min > max) {
+    elf_err(elf, "%s: ERROR: ELF contains no loadable program headers.\n"
+            , __FUNCTION__
+            );
+    return -1;
+  }
+
+  uint64_t virt_kstart = min + virt_offset;
+  uint64_t virt_kend = max + virt_offset;
+  // Check if elf maximum address overflows.
+  if (((ElfAddr(WX)) virt_kend) < max) return -1;
+
+  if (parms->virt_entry == UNSET_ADDR) {
+    parms->virt_entry = elf->entry;
+  }
+
+  elf_msg(elf, "%s: addresses:\n", __FUNCTION__);
+  elf_msg(elf, "    virt_base        = 0x%" PRIx64 "\n", parms->virt_base);
+  elf_msg(elf, "    elf_paddr_offset = 0x%" PRIx64 "\n", parms->elf_paddr_offset);
+  elf_msg(elf, "    virt_offset      = 0x%" PRIx64 "\n", virt_offset);
+  elf_msg(elf, "    virt_kstart      = 0x%" PRIx64 "\n", virt_kstart);
+  elf_msg(elf, "    virt_kend        = 0x%" PRIx64 "\n", virt_kend);
+  elf_msg(elf, "    virt_entry       = 0x%" PRIx64 "\n", parms->virt_entry);
+  elf_msg(elf, "    p2m_base         = 0x%" PRIx64 "\n", parms->p2m_base);
+
+  if (parms->virt_entry < virt_kstart) {
+    elf_err(elf, "%s: ERROR: ELF start or entries are out of bounds.\n"
+                 "kstart = %x\nkend = %x\nvirt_entry = %x\nvirt_base = %x\n"
+            , __FUNCTION__
+            , virt_kstart
+            , virt_kend
+            , parms->virt_entry
+            , parms->virt_base
+            );
+    return -1;
+  }
+
+  if ( (parms->p2m_base != UNSET_ADDR) &&
+       (parms->p2m_base >= virt_kstart) &&
+       (parms->p2m_base < virt_kend) ) {
+    elf_err(elf, "%s: ERROR: P->M table base is out of bounds.\n",
+            __FUNCTION__);
+    return -1;
+  }
+
+  return 0;
+}
+
+int elf_xen_parse(WX)(const struct elf_binary* elf,
+                      struct elf_dom_parms* parms) {
+  int xen_elfnotes = 0;
+  int rc;
+
+  memset(parms, 0, sizeof(*parms));
+  parms->virt_base = UNSET_ADDR;
+  parms->virt_entry = UNSET_ADDR;
+  parms->virt_hypercall = UNSET_ADDR;
+  parms->virt_hv_start_low = UNSET_ADDR;
+  parms->p2m_base = UNSET_ADDR;
+  parms->elf_paddr_offset = UNSET_ADDR;
+
+  /* Find and parse elf notes. */
+  {
+    uint16_t i;
+    uint16_t count = elf->phdr_count;
+    for ( i = 0; i < count; i++ ) {
+      const ElfPhdr(WX)* phdr = elf_phdr_by_index(WX)(elf, i);
+      if (phdr->p_type != PT_NOTE)
+          continue;
+
+      /*
+       * Some versions of binutils do not correctly set p_offset for
+       * note segments.
+       */
+      if (phdr->p_offset == 0) continue;
+
+      const char* notes_start = elf->image + phdr->p_offset;
+      const char* notes_end = notes_start + phdr->p_filesz;
+      ASSERT(notes_start < notes_end);
+
+      rc = elf_xen_parse_notes(WX)(elf, notes_start, notes_end, parms);
+      if (rc == -1) return -1;
+
+      xen_elfnotes += rc;
+    }
+  }
+
+  /*
+   * Fall back to any SHT_NOTE sections if no valid note segments
+   * were found.
+   */
+  if ( xen_elfnotes == 0 ) {
+    int i;
+    int count = elf->shdr_count;
+
+    const char* raw_shdr = elf->shdr_start;
+
+    for ( i = 0; i < count; i++ ) {
+      const ElfShdr(WX)* shdr = (const ElfShdr(WX)*) raw_shdr;
+
+      if (shdr->sh_type == SHT_NOTE) {
+
+        const char* notes_start = elf->image + shdr->sh_offset;
+        const char* notes_end = notes_start + shdr->sh_size;
+
+        rc = elf_xen_parse_notes(WX)(elf, notes_start, notes_end, parms);
+
+        if (rc == -1) return -1;
+
+        if ( xen_elfnotes == 0 && rc > 0)
+          elf_msg(elf, "%s: using notes from SHT_NOTE section\n", __FUNCTION__);
+
+        xen_elfnotes += rc;
+      }
+      raw_shdr += elf->shdr_size;
+    }
+  }
+
+  // Finally fall back to the __xen_guest section.
+  if (xen_elfnotes == 0) {
+    const ElfShdr(WX)* shdr = elf_shdr_by_name(WX)(elf, "__xen_guest");
+    if (shdr) {
+      const char* guest_start = elf->image + shdr->sh_offset;
+      uint64_t guest_size = shdr->sh_size;
+      uint64_t guest_len = strnlen(guest_start, guest_size);
+
+      // Check that this is not a fake NO_BITS section
+      if (shdr->sh_type == SHT_NOBITS) {
+        elf_err(elf, "%s: __xen_guest section is of type SHT_NOBITS.\n");
+        return -1;
+      }
+
+      // Check section is null terminated.
+      if (guest_len == guest_size) {
+        elf_err(elf, "%s: __xen_guest section is not null terminated.");
+        return -1;
+      }
+
+      elf_msg(elf, "%s: __xen_guest: \"%s\"\n", __FUNCTION__, guest_start);
+      if (!elf_xen_parse_guest_info(elf, parms, guest_start)) {
+        parms->status = XEN_PARMS_XEN_GUEST;
+      }
+    }
+  }
+
+  // Check parms were initialized.
+  if (parms->status == XEN_PARMS_UNINITIALIZED) {
+    elf_err(elf, "%s: ERROR: Not a Xen-ELF image: "
+            "No ELF notes or '__xen_guest' section found.\n",
+            __FUNCTION__);
+    return -1;
+  }
+
+  /* Check that loader == "generic" or guest_os == "linux" */
+  if (strncmp(parms->loader, "generic", 7)
+       && strncmp(parms->guest_os, "linux", 5)) {
+    elf_err(elf, "%s: ERROR: Will only load images built for the generic "
+            "loader or Linux images", __FUNCTION__);
+    return -1;
+  }
+
+  if (strncmp(parms->xen_ver, "xen-3.0", 7)) {
+    elf_err(elf, "%s: ERROR: Xen will only load images built "
+            "for Xen v3.0\n", __FUNCTION__);
+    return -1;
+  }
+
+  if ( elf_xen_addr_calc(WX)(elf, parms) != 0 )
+      return -1;
+  return 0;
+}

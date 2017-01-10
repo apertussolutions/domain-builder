@@ -1,0 +1,193 @@
+// BANNERSTART
+// Copyright: Xen developers?
+// Copyright: 2011 Galois Inc.
+// License-file: LICENSE
+// BANNEREND
+
+/** 
+ * Checks the integrity of the elf image.
+ * Properties that are checked include:
+ * * Verify that ehdr, phdr and shdr entries are contained in the image.
+ * * Verify that phdr file data contained in the image.
+ * * Verify that addresses in phdr entries do not overflow address space, and
+ *   file data is completely written into address space.
+ * * Verify that shdr file data is contained in the image.
+ * image ehdr is correct size. */
+int elf_check(WX)(const char* image, size_t size, struct elf_binary* elf) {
+  // Check image {{{1
+
+  // Check size is at least size of ehdr.
+  if (size < sizeof(ElfEhdr(WX))) {
+    elf_err(elf, "%s: ehdr overflow (size %lx)\n", __FUNCTION__, size);
+    return -1;
+  }
+
+  // Check ehdr {{{2
+
+  const ElfEhdr(WX)* ehdr = (const ElfEhdr(WX)*) image;
+#if WX == 64
+  if (ehdr->e_machine != EM_X86_64) {
+    elf_err(elf, "%s: ERROR: Invalid machine for 64-bit ELF image.\n", __FUNCTION__);
+    return -1;
+  }
+#else 
+  if (ehdr->e_machine != EM_386) {
+    elf_err(elf, "%s: ERROR: Invalid machine for 32-bit ELF image.\n", __FUNCTION__);
+    return -1;
+  }
+#endif
+
+  // Check phdr table is in valid memory.
+  uint64_t ph_off = ehdr->e_phoff;
+  uint32_t ph_entsize = ehdr->e_phentsize;
+  uint16_t ph_cnt = ehdr->e_phnum;
+  if (ph_entsize < sizeof(ElfPhdr(WX))) {
+    elf_err(elf, "%s: phdr entry size is less than size of phdr\n",
+            __FUNCTION__);
+    return -1;
+  }
+  if ((ph_off > size) || (ph_entsize * ph_cnt > size - ph_off)) {
+    elf_err(elf, "%s: phdr overflow (num %" PRIx64 " * es * " PRIx64 " > size %lx)\n",
+            __FUNCTION__, ph_entsize, ph_cnt, size);
+    return -1;
+  }
+
+  // Check shdr is in valid memory.
+  uint64_t sh_off = ehdr->e_shoff;
+  uint32_t sh_entsize = ehdr->e_shentsize;
+  uint16_t sh_cnt = ehdr->e_shnum;
+  if (sh_entsize < sizeof(ElfShdr(WX))) {
+    elf_err(elf, "%s: shdr entry size is less than size of phdr\n",
+            __FUNCTION__);
+    return -1;
+  }
+  if ((size < sh_off) || (size - sh_off < ((uint64_t) sh_entsize) * sh_cnt)) {
+    elf_err(elf, "%s: shdr overflow (num %" PRIx64 " * es %" PRIx64 " > size %lx)\n",
+            __FUNCTION__, sh_entsize, sh_cnt, size);
+    return -1;
+  }
+
+  uint16_t str_idx = ehdr->e_shstrndx;
+  if ((str_idx != SHN_UNDEF) && (sh_cnt <= str_idx)) {
+    elf_err(elf, "%s: shstrndx is out of range (num %" PRIx64 " * es %" PRIx64 " > size %lx)\n",
+            __FUNCTION__, str_idx, sh_cnt, size);
+    return -1;
+  }
+
+  // Check phdr entries {{{2
+  {
+    uint16_t i;
+    const char* raw_phdr = image + ph_off;
+    for (i = 0; i != ph_cnt; ++i) {
+      const ElfPhdr(WX)* phdr = (const ElfPhdr(WX)*) raw_phdr;
+
+      uint64_t file_offset = phdr->p_offset;
+      uint64_t file_size = phdr->p_filesz;
+
+      // Check that file data is inside image (being careful not to overflow)
+      if (file_size > 0 && ((size < file_offset) || (size - file_offset < file_size))) {
+        elf_err(elf, "%s: phdr data is outside file",
+                __FUNCTION__);
+        return -1;
+      }
+
+      if (elf_phdr_is_loadable(WX)(phdr)) {
+        ElfAddr(WX) phy_addr = phdr->p_paddr;
+        uint64_t mem_size = phdr->p_memsz;
+
+        // Check for overflow in memory size.
+        ElfAddr(WX) paddr_max = phy_addr + mem_size;
+        if (paddr_max < phy_addr) {
+          elf_err(elf, "%s: phdr end is too large",
+                __FUNCTION__);
+          return -1;
+        }
+
+        // Check that virtual space is not less than file size.
+        if (mem_size < file_size) {
+          elf_err(elf, "%s: phdr memory size is less than file fize",
+                __FUNCTION__);
+          return -1;
+        }
+      }
+
+      raw_phdr += ph_entsize;
+    }
+  }
+
+  // Check shdr headers {{{2
+
+  {
+    uint16_t i;
+    const char* raw_shdr = image + sh_off;
+    for (i = 0; i != sh_cnt; ++i, raw_shdr += sh_entsize) {
+      const ElfShdr(WX)* shdr = (const ElfShdr(WX)*) raw_shdr;
+
+      uint64_t file_offset = shdr->sh_offset;
+      uint64_t file_size = shdr->sh_size;
+
+      if (shdr->sh_type == SHT_NOBITS) continue;
+
+      // Check that file data is inside image (being careful not to overflow)
+      if ((size < file_offset) || (size - file_offset < file_size)) {
+        elf_err(elf, "%s: phdr data is outside file",
+                __FUNCTION__);
+        return -1;
+      }
+
+    }
+  }
+
+  // Initialize elf values {{{2
+  elf->phdr_count = ph_cnt;
+  elf->phdr_size = ph_entsize;
+  elf->phdr_start = image + ph_off;
+  elf->shdr_count = sh_cnt;
+  elf->shdr_size = sh_entsize;
+  elf->shdr_start = image + sh_off;
+  elf->entry = ehdr->e_entry;
+
+  // Initialize elf section string table {{{2
+  // Find section string table.
+  if (str_idx == SHN_UNDEF) {
+    elf->strtab_start = NULL;
+    elf->strtab_size = 0;
+  } else {
+    const ElfShdr(WX)* str_shdr =
+     (const ElfShdr(WX)*) (image + sh_off + ((uint64_t) sh_entsize) * str_idx);
+
+    const char* str_table = image + str_shdr->sh_offset;
+    uint64_t str_size = str_shdr->sh_size;
+
+    // Check section string indices are valid.
+    uint16_t i;
+    const char* raw_shdr = image + sh_off;
+    for (i = 0; i != sh_cnt; ++i) {
+      const ElfShdr(WX)* shdr = (const ElfShdr(WX)*) raw_shdr;
+      uint64_t sh_name = shdr->sh_name;
+
+      // Check section name index is valid.
+      if (str_size < sh_name) {
+        elf_err(elf, "%s: section name outside names.", __FUNCTION__);
+        return -1;
+      }
+
+      // Check section name is null terminated.
+      const char* sname = str_table + sh_name;
+      uint64_t max_len = str_size - sh_name;
+      if (strnlen(sname, max_len) == max_len) {
+        elf_err(elf, "%s: section name is not null-terminated.", __FUNCTION__);
+        return -1;
+      }
+
+      raw_shdr += sh_entsize;
+    }
+
+    elf->strtab_start = str_table;
+    elf->strtab_size = str_size;
+  }
+
+  // }}}2
+
+  return 0;
+}

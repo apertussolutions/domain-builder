@@ -1,0 +1,6 @@
+These are copied from
+
+tools/include/xen-foreign
+
+in the Xen tree to avoid a dependency on the presence of the Xen source.
+

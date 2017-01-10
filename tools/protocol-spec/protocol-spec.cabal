@@ -1,0 +1,24 @@
+Name:                protocol-spec
+Version:             0.2
+Synopsis:            A tool for marshalling C data structures.
+Description:         A tool for marshalling C data structures.
+License:             AllRightsReserved
+License-file:        LICENSE
+Author:              Eric Mertens and Iavor S. Diatchki
+Maintainer:          emertens@gmail.com
+Copyright:           Galois Inc., 2012
+Category:            Data
+Build-type:          Simple
+Cabal-version:       >=1.2
+
+
+Executable protocol-spec
+  Main-is:          Driver.hs
+  Other-modules:    AST, CTypes, Driver, Pretty,
+                    Check, Common, Decode, Encode, Parse
+
+  Build-depends:    base, containers, pretty, pretty-show,
+                    language-c>=0.4, data-hash, monadLib, language-c-quote>= 0.4.3,
+                    mainland-pretty>=0.2.5, filepath
+  Hs-Source-dirs:   src
+  GHC-options:      -Wall -O2

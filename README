@@ -1,0 +1,70 @@
+== Overview ==
+
+This directory contains the source code for a domain builder VM.
+The sub-directories are as follows:
+
+  - db-boot:
+    A "one-shot" domain building VM, used to boot a platform.
+    This domain builder creates and starts a collection of VMs
+    from its RAM disk, which is a CPIO archive.
+
+  - db-server:
+    A VM building server VM.  It waits for requests and builds VMs
+    on demand.
+
+  - lib/*:
+    A collection of libraries used to build the domain building VMs.
+
+  - control-domain:
+    A VM that can start whole platforms.
+
+  - protocols:
+    Binary fomrat spceifications used for communication between
+    the various components.
+
+  - tools:
+    Various support tools. For more detail, take a look at the README
+    file in the `tools` directory.
+
+  - tests:
+    Various tests and examples.
+
+  -mk:
+    Configuration for the build system.
+
+== Configure the Build Process ==
+
+To configure the build process for the VM, please create a configuration
+file named "mk/config".  A simple way to create this file is to modify
+the file "mk/config.example".  The file contains information about
+the location of the Xen headers and various build tools.
+
+
+== Build the VM ==
+
+After configuring the VM, you should be able to build it like this:
+
+> make
+
+This is a very simple Makefile (this should probalby be fixed :-)
+that simply runs make everywhere.
+
+If everything goes according to plan, you should find kernel images
+for the two domain builders in "db-boot" and "db-server".
+
+== Running an Example ==
+
+The directory "tests/kernels" contains various example kernels which can
+be started by the domain builder.  Here is how you can try it out:
+
+> make -C tests memorywalk.run
+
+This command does the following:
+  1. Builds an example VM.
+  2. Makes a cpio image to package it.
+  3. Creates a qemu disk image with:
+     - A Xen hypervisor as the kernel,
+     - The domain builder (db-boot), as Dom0,
+     - The cpio containing the VM's image (ass db-boot's RAM disk)
+  3. Start qemu with the given disk image.
+

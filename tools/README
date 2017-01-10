@@ -1,0 +1,48 @@
+This directory contains various programs, services, and utilities,
+which perform tasks relevant for the domain builder.
+
+compile-db-spec:
+  A program to compile Python-style configuration files into
+  the binary format used by the domain builder.
+
+  The same directory also contains a program for compiling control
+  domain schemas.
+
+protocol-spec:
+  A tools for generating the serialization and deserialization code
+  used for communication betweens the VMs.  The binary specifications
+  compiled by this tool are in `$TOP/protocols`.
+
+host-storage:
+  Provides a read-only interface to the file system, intended to be
+  used by the domain building VM.
+
+db-check:
+  Check the health of db-server.
+
+db-control:
+  A Linux program from sending messages to the db-server VM,
+  form another VM.
+
+control-control:
+  A Linux program from sending messages to the control-domain server VM,
+  form another VM.
+
+xs-control:
+  Some linux programs for sending messages to the Xenstore domain.
+
+console-control:
+  A Linux program from sending messages to the console-domain server VM,
+  form another VM.
+
+dm-launcher:
+  A program for starting the device manager associated with a HVM.
+
+xenbackendd:
+  The xenbackend daemon listens on the XenStore and executes scripts as to
+  configure devices which the Driver Domain is configured as the backend.
+
+tpm-backend:
+  The tpm-backend script connects /dev/tpm to the appropriate Xen channel. It
+  connects via the XenStore to the front-end domain.
+

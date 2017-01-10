@@ -1,0 +1,18 @@
+Copyright Galois, Inc. 2009
+Xen Domain Builder README
+
+This is a domain building library written in C.
+It uses libc, libsmallOS, and libelf.
+
+NOTE:  For the moment, the library expects that users
+will provide a global variable called "pt_root", which
+contains the virtual address of the top-most page table
+strucutre.
+
+BUILD INSTRUCTIONS:
+
+Just use "make", for the moment.
+
+TO CLEAN:
+
+> make clean

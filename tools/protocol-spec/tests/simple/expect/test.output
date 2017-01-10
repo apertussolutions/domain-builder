@@ -1,0 +1,54 @@
+-- test1.out -----------------
+timestamp:  1234
+cmd:
+  case open:
+    filename:  /path/to/file
+    num_refs:  2
+    refs:
+      [0]:  20
+      [1]:  30
+encoding: Ok (62 bytes)
+saving: Ok
+decoding: Ok
+timestamp:  1234
+cmd:
+  case open:
+    filename:  /path/to/file
+    num_refs:  2
+    refs:
+      [0]:  20
+      [1]:  30
+------------------------------------
+
+-- test2.out -----------------
+timestamp:  4321
+cmd:
+  case open:
+    filename:  <null>
+    num_refs:  0
+    refs:
+encoding: Ok (40 bytes)
+saving: Ok
+decoding: Ok
+timestamp:  4321
+cmd:
+  case open:
+    filename:  <null>
+    num_refs:  0
+    refs:
+------------------------------------
+
+-- test3.out -----------------
+timestamp:  5432
+cmd:
+  case close:
+    fd:  42
+encoding: Ok (40 bytes)
+saving: Ok
+decoding: Ok
+timestamp:  5432
+cmd:
+  case close:
+    fd:  42
+------------------------------------
+

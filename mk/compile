@@ -1,0 +1,21 @@
+# This file contains general compilation options/rules
+# for smallOS based kernels.
+
+include $(TOP)/mk/rules-basic
+
+ifeq ($(origin INCLUDE_DIRS), undefined)
+$(error Variable INCLUDE_DIRS is undefined.            \
+        This variable defines the list of directories  \
+        containing header files.)
+endif
+
+CPPFLAGS     +=-nostdinc $(addprefix -I,$(INCLUDE_DIRS))
+CFLAGS       +=-O -fno-stack-protector -mcmodel=medium -g
+
+
+# Makes it easy to depend on all headers quickly.
+INCLUDE_FILES =$(shell $(FIND) $(INCLUDE_DIRS) -name "*.h")
+
+tags: $(INCLUDE_FILES) $(wildcard *.c)
+	$(CTAGS) -R $(INCLUDE_DIRS) .
+
